@@ -367,18 +367,31 @@ header {
 .alert-high {
   background: var(--danger-bg);
   border-left: 5px solid var(--danger);
-  color: #7f1d1d;
+  color: #fca5a5;
 }
 
 .alert-medium {
   background: var(--warning-bg);
   border-left: 5px solid var(--warning);
-  color: #78350f;
+  color: #fde047;
 }
 
 .alert-low {
+  background: rgba(254, 240, 138, 0.15);
+  border-left: 5px solid #eab308;
+  color: #fef08a;
+}
+
+body.light-theme .alert-high {
+  color: #7f1d1d;
+}
+
+body.light-theme .alert-medium {
+  color: #78350f;
+}
+
+body.light-theme .alert-low {
   background: #fef9c3;
-  border-left: 5px solid #ca8a04;
   color: #713f12;
 }
 
