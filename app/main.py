@@ -170,15 +170,27 @@ async def get_session(call_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
     return session.model_dump()
 
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return Response(status_code=204)
+@app.get("/")
+async def root():
+    """Root endpoint for warming up the sleeping server and checking API status."""
+    return {
+        "service": "CareBridge Voice AI — Backend API",
+        "status": "online",
+        "message": "CareBridge backend server is awake and healthy.",
+        "endpoints": {
+            "health": "/api/health",
+            "docs": "/docs",
+            "start_session": "/api/session/start",
+            "chat": "/api/chat",
+            "end_session": "/api/session/end"
+        },
+        "frontend_app": "https://carebridge-frontend-6wyh.onrender.com"
+    }
 
-# Mount frontend static files
+# Mount frontend static files under /static
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
 if not os.path.exists(static_dir):
     static_dir = "static"
 
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static_root")

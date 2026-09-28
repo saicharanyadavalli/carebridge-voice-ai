@@ -63,12 +63,11 @@ def test_session_lifecycle_and_chat():
     assert "summary" in end_data["report"]
     assert "overall_status" in end_data["report"]
 
-def test_static_files():
-    # Verify index.html loads at /
+def test_api_root():
+    # Verify backend API root info loads at /
     root_resp = client.get("/")
     assert root_resp.status_code == 200
     assert "CareBridge" in root_resp.text
-
-    # Verify style.css loads
-    css_resp = client.get("/style.css")
-    assert css_resp.status_code == 200
+    data = root_resp.json()
+    assert data["status"] == "online"
+    assert "endpoints" in data

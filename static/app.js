@@ -148,6 +148,7 @@ class CareBridgeController {
 
     this._initSpeechRecognition();
     this._bindEvents();
+    this._checkServerWarmup();
   }
 
   _initSpeechRecognition() {
@@ -365,6 +366,37 @@ class CareBridgeController {
     }, 8000);
   }
 
+  async _checkServerWarmup() {
+    const apiBase = getApiBase();
+    if (!apiBase) return; // Same origin, no external warmup needed
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const resp = await fetch(`${apiBase}/api/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (resp.ok) {
+        console.log("CareBridge backend is awake and healthy.");
+      }
+    } catch (e) {
+      console.log("CareBridge backend may be sleeping (cold start). Initiating warm-up ping...");
+      if (this.activeSpeechText && this.currentState === State.IDLE) {
+        this.activeSpeechText.textContent = "Connecting to server (waking up, please give it a moment)...";
+      }
+      const warmInterval = setInterval(async () => {
+        try {
+          const check = await fetch(`${apiBase}/api/health`);
+          if (check.ok) {
+            clearInterval(warmInterval);
+            if (this.activeSpeechText && this.currentState === State.IDLE) {
+              this.activeSpeechText.textContent = "Press Start Conversation to begin.";
+            }
+          }
+        } catch (err) {}
+      }, 5000);
+      setTimeout(() => clearInterval(warmInterval), 60000);
+    }
+  }
+
   async startCall() {
     try {
       this.hideSummary();
@@ -373,6 +405,7 @@ class CareBridgeController {
       this.transcriptList.innerHTML = '';
       this.alertsContainer.innerHTML = '<p style="color: #64748b; font-size: 15px;">No active safety alerts.</p>';
       this.transitionTo(State.THINKING);
+      this.activeSpeechText.textContent = "Connecting to server (waking up if sleeping, please wait)...";
 
       // Determine backend origin
       const apiBase = getApiBase();
