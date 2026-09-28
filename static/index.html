@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareBridge — English Voice Elderly-Care Companion</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Top Header -->
+    <header>
+      <div class="logo-area">
+        <span class="logo-icon">🌿</span>
+        <div class="title-tagline">
+          <h1>CareBridge</h1>
+          <span class="tagline">Voice-based Elderly-Care Companion</span>
+        </div>
+      </div>
+      <div class="header-controls">
+        <button id="btnLang" class="btn-secondary" title="Switch Language (English / हिन्दी)">
+          🌐 English
+        </button>
+        <button id="btnTheme" class="btn-secondary" title="Toggle Light / Dark Mode">
+          ☀️ Light Mode
+        </button>
+        <button id="btnMute" class="btn-secondary" title="Mute/Unmute Spoken AI Voice">
+          🔊 Mute AI
+        </button>
+      </div>
+    </header>
+
+    <!-- Error / Notification banner -->
+    <div id="errorBanner" class="notification-banner notif-error"></div>
+
+    <!-- Main Interaction & State Card -->
+    <section class="interaction-card">
+      <div class="state-badge-container">
+        <div id="stateBadge" class="state-badge state-IDLE">
+          <span class="pulse-circle"></span>
+          <span id="stateText">IDLE</span>
+        </div>
+      </div>
+
+      <div id="activeSpeechText" class="active-speech-banner">
+        Press Start Conversation to begin.
+      </div>
+
+      <div class="controls-area">
+        <button id="btnStart" class="btn-large btn-start">
+          <span style="font-size: 26px;">🎙️</span> Start Conversation
+        </button>
+        <button id="btnEnd" class="btn-large btn-end" disabled>
+          <span style="font-size: 26px;">🛑</span> End Conversation
+        </button>
+      </div>
+
+      <!-- Text Input Fallback Bar (Dual Voice + Typing Support) -->
+      <form id="textChatForm" style="display: flex; gap: 10px; margin-top: 20px; max-width: 600px; margin-left: auto; margin-right: auto;">
+        <input type="text" id="manualInput" placeholder="Or type your reply here and press Enter..." style="flex: 1; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--card-subtle); color: var(--text-main); font-size: 16px; outline: none;">
+        <button type="submit" id="btnSendText" class="btn-secondary" style="padding: 14px 22px; font-weight: bold; background: var(--primary); color: #0f172a; border: none; border-radius: 12px; cursor: pointer;">Send</button>
+      </form>
+    </section>
+
+    <!-- Real-time Dashboard Grid -->
+    <div class="dashboard-grid">
+      <!-- Live Conversation Transcript -->
+      <section class="panel-card">
+        <div class="panel-title">
+          <span>💬 Live Conversation</span>
+          <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">Real-time</span>
+        </div>
+        <div id="transcriptList" class="transcript-box">
+          <div style="color: #94a3b8; text-align: center; margin-top: 100px;">
+            Conversation will appear here once started.
+          </div>
+        </div>
+      </section>
+
+      <!-- Caregiver Live Status & Safety Alerts -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        <!-- Safety Alert Panel -->
+        <section class="panel-card">
+          <div class="panel-title">
+            <span>🛡️ Caregiver Live Alerts</span>
+          </div>
+          <div id="alertsContainer" class="alerts-list">
+            <p style="color: #64748b; font-size: 15px;">No active safety alerts.</p>
+          </div>
+        </section>
+
+        <!-- Structured Elder Status -->
+        <section class="panel-card">
+          <div class="panel-title">
+            <span>📊 Structured Elder Status</span>
+          </div>
+          <div id="statusIndicators" class="status-indicators">
+            <!-- Dynamic status badges inserted here -->
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Final End-of-Call Caregiver Report Modal/View -->
+    <section id="summaryModal" class="summary-container">
+      <div class="summary-header">
+        <h2 style="color: var(--primary);">📋 Caregiver End-of-Call Summary</h2>
+        <span id="sumOverallStatus" class="overall-status-badge status-stable">Stable</span>
+      </div>
+
+      <div class="summary-section">
+        <h3>Call Overview</h3>
+        <p id="sumOverview" style="font-size: 18px; color: #1e293b;"></p>
+      </div>
+
+      <div class="summary-section">
+        <h3>Key Observations</h3>
+        <ul id="sumKeyPoints" class="summary-list"></ul>
+      </div>
+
+      <div class="summary-section">
+        <h3>Detected Concerns</h3>
+        <ul id="sumConcerns" class="summary-list"></ul>
+      </div>
+
+      <div class="summary-section">
+        <h3>Suggested Caregiver Follow-Up</h3>
+        <ul id="sumCaregiverActions" class="summary-list"></ul>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
