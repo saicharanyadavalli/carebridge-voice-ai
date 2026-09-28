@@ -98,7 +98,8 @@ async def chat(request: ChatRequest):
     """
     session = session_store.get_session(request.callId)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        logger.warning(f"Session {request.callId} not found (server was likely restarted). Automatically re-creating session.")
+        session = session_store.create_session(call_id=request.callId)
 
     user_text = request.message.strip()
     if not user_text:
@@ -151,7 +152,8 @@ async def end_session(request: EndSessionRequest):
     """Ends the session and returns structured caregiver summary."""
     session = session_store.get_session(request.callId)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        logger.warning(f"Session {request.callId} not found on end_session. Creating session to generate summary.")
+        session = session_store.create_session(call_id=request.callId)
 
     session_store.end_session(request.callId)
     summary_report = await SummaryService.generate_summary(session)

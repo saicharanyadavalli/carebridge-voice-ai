@@ -8,8 +8,9 @@ class SessionStore:
     def __init__(self):
         self._sessions: Dict[str, SessionState] = {}
 
-    def create_session(self) -> SessionState:
-        call_id = f"call_{uuid.uuid4().hex[:12]}"
+    def create_session(self, call_id: Optional[str] = None) -> SessionState:
+        if not call_id:
+            call_id = f"call_{uuid.uuid4().hex[:12]}"
         now_iso = datetime.now(timezone.utc).isoformat()
         session = SessionState(
             callId=call_id,

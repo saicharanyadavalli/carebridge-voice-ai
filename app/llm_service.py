@@ -68,45 +68,51 @@ class LLMService:
             "HTTP-Referer": "https://carebridge.local",
             "X-Title": "CareBridge Voice AI"
         }
-        model = config.OPENROUTER_MODEL
-        payload = {
-            "model": model,
-            "messages": messages,
-            "response_format": {"type": "json_object"},
-            "temperature": 0.3,
-            "max_tokens": 1000
-        }
+        
+        # Primary configured model + resilient fallback candidates
+        models_to_try = [config.OPENROUTER_MODEL]
+        for candidate in ["meta-llama/llama-3.3-70b-instruct:free", "google/gemini-2.0-flash-exp:free", "mistralai/mistral-small-24b-instruct-2501:free"]:
+            if candidate not in models_to_try:
+                models_to_try.append(candidate)
 
-        async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-            try:
-                response = await client.post(cls.OPENROUTER_URL, headers=headers, json=payload)
-                if response.status_code == 200:
-                    data = response.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        message_obj = choices[0].get("message", {})
-                        content = message_obj.get("content")
-                        if content:
-                            parsed = cls._parse_and_validate(content)
-                            if parsed:
-                                logger.info(f"Successfully received turn response from OpenRouter: {model}")
-                                return parsed
-                        reasoning = message_obj.get("reasoning") or ""
-                        if reasoning:
-                            extracted = cls._extract_json_from_text(reasoning)
-                            if extracted:
-                                logger.info(f"Recovered turn JSON from OpenRouter reasoning output on {model}")
-                                return cls._ensure_schema_fields(extracted)
-                    logger.warning(f"OpenRouter model {model} returned 200 but content was empty or unparseable.")
-                else:
-                    logger.warning(f"OpenRouter model {model} returned HTTP {response.status_code}: {response.text[:200]}")
-            except Exception as e:
-                logger.error(f"Error calling OpenRouter ({model}): {e}")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for model in models_to_try:
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.3,
+                    "max_tokens": 1000
+                }
+                try:
+                    response = await client.post(cls.OPENROUTER_URL, headers=headers, json=payload)
+                    if response.status_code == 200:
+                        data = response.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            message_obj = choices[0].get("message", {})
+                            content = message_obj.get("content")
+                            if content:
+                                parsed = cls._parse_and_validate(content)
+                                if parsed:
+                                    logger.info(f"Successfully received turn response from OpenRouter: {model}")
+                                    return parsed
+                            reasoning = message_obj.get("reasoning") or ""
+                            if reasoning:
+                                extracted = cls._extract_json_from_text(reasoning)
+                                if extracted:
+                                    logger.info(f"Recovered turn JSON from OpenRouter reasoning output on {model}")
+                                    return cls._ensure_schema_fields(extracted)
+                        logger.warning(f"OpenRouter model {model} returned 200 but content was empty. Trying next model...")
+                    else:
+                        logger.warning(f"OpenRouter model {model} returned HTTP {response.status_code}. Trying next model...")
+                except Exception as e:
+                    logger.warning(f"Error calling OpenRouter ({model}): {e}. Trying next model...")
         return None
 
     @classmethod
     async def _call_nvidia(cls, messages: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
-        """Calls NVIDIA NIM with config.NVIDIA_MODEL."""
+        """Calls NVIDIA NIM with config.NVIDIA_MODEL and fast resilient fallbacks."""
         api_key = config.NVIDIA_API_KEY
         if not api_key or api_key.startswith("your_"):
             return None
@@ -116,41 +122,49 @@ class LLMService:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
-        model = config.NVIDIA_MODEL
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.5,
-            "top_p": 0.7,
-            "max_tokens": 1024,
-            "response_format": {"type": "json_object"}
-        }
 
-        async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
-            try:
-                response = await client.post(url, headers=headers, json=payload)
-                if response.status_code == 200:
-                    data = response.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        message_obj = choices[0].get("message", {})
-                        content = message_obj.get("content")
-                        if content:
-                            parsed = cls._parse_and_validate(content)
-                            if parsed:
-                                logger.info(f"Successfully received turn response from NVIDIA NIM: {model}")
-                                return parsed
-                        reasoning = message_obj.get("reasoning") or ""
-                        if reasoning:
-                            extracted = cls._extract_json_from_text(reasoning)
-                            if extracted:
-                                logger.info(f"Recovered turn JSON from NVIDIA NIM reasoning output on {model}")
-                                return cls._ensure_schema_fields(extracted)
-                    logger.warning(f"NVIDIA NIM model {model} returned 200 but content was empty or unparseable.")
-                else:
-                    logger.warning(f"NVIDIA NIM model {model} returned HTTP {response.status_code}: {response.text[:200]}")
-            except Exception as e:
-                logger.error(f"Error calling NVIDIA NIM ({model}): {e}")
+        # Primary configured model + high-availability NIM models
+        models_to_try = [config.NVIDIA_MODEL]
+        for candidate in ["meta/llama-3.1-70b-instruct", "meta/llama-3.1-8b-instruct"]:
+            if candidate not in models_to_try:
+                models_to_try.append(candidate)
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for model in models_to_try:
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.5,
+                    "top_p": 0.7,
+                    "max_tokens": 1024,
+                    "response_format": {"type": "json_object"}
+                }
+                try:
+                    response = await client.post(url, headers=headers, json=payload)
+                    if response.status_code == 200:
+                        data = response.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            message_obj = choices[0].get("message", {})
+                            content = message_obj.get("content")
+                            if content:
+                                parsed = cls._parse_and_validate(content)
+                                if parsed:
+                                    logger.info(f"Successfully received turn response from NVIDIA NIM: {model}")
+                                    return parsed
+                            reasoning = message_obj.get("reasoning") or ""
+                            if reasoning:
+                                extracted = cls._extract_json_from_text(reasoning)
+                                if extracted:
+                                    logger.info(f"Recovered turn JSON from NVIDIA NIM reasoning output on {model}")
+                                    return cls._ensure_schema_fields(extracted)
+                        logger.warning(f"NVIDIA NIM model {model} returned 200 but content was empty.")
+                    elif response.status_code == 503:
+                        logger.warning(f"NVIDIA NIM model {model} returned 503 Overloaded. Trying alternative NIM model...")
+                    else:
+                        logger.warning(f"NVIDIA NIM model {model} returned HTTP {response.status_code}.")
+                except Exception as e:
+                    logger.warning(f"Error calling NVIDIA NIM ({model}): {e}")
         return None
 
     @classmethod
