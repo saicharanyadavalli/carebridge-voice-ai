@@ -27,8 +27,11 @@ class SummaryService:
     @classmethod
     async def generate_summary(cls, session: SessionState) -> Dict[str, Any]:
         """
-        Builds a compact summary payload from the session state and calls OpenRouter
-        or generates a deterministic summary from recorded status and concerns.
+        Builds a compact summary payload from the session state and calls the LLM hierarchy:
+        1. Google Gemini (gemini-3.5-flash-lite with Key 1 -> Key 2 -> Key 3 rotation)
+        2. OpenRouter (secondary fallback)
+        3. NVIDIA NIM (tertiary fallback)
+        4. Structured Clinical Heuristic Summary (guaranteed fail-safe)
         """
         # Determine baseline overall status
         status_rank = "stable"
@@ -37,13 +40,10 @@ class SummaryService:
         elif any(c.get("level") in ("medium", "low") for c in session.activeConcerns) or session.elderStatus.get("painPresent") is True:
             status_rank = "attention_needed"
 
-        # Check if API key is present for LLM generation
-        if not config.OPENROUTER_API_KEY or config.OPENROUTER_API_KEY.startswith("your_"):
-            return cls._build_heuristic_summary(session, status_rank)
-
         # Prepare context payload for summary
         call_details = {
             "duration": f"Started {session.startedAt}, ended {session.endedAt}",
+            "language": getattr(session, "language", "en"),
             "elderStatus": session.elderStatus,
             "importantMemory": session.importantMemory,
             "activeConcerns": session.activeConcerns,
@@ -51,23 +51,57 @@ class SummaryService:
             "recentTurns": session.recentTurns
         }
 
+        user_content = f"Summarize this elder session:\n{json.dumps(call_details, default=str)}"
+
+        # 1. Try Gemini first (with multi-key rotation and resilient model fallbacks)
+        gemini_keys = config.GEMINI_API_KEYS
+        if gemini_keys:
+            models_to_try = [config.GEMINI_MODEL]
+            for fallback_m in ["gemini-2.5-flash", "gemini-2.0-flash"]:
+                if fallback_m not in models_to_try:
+                    models_to_try.append(fallback_m)
+
+            async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
+                for current_model in models_to_try:
+                    for idx, key in enumerate(gemini_keys):
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={key}"
+                        payload = {
+                            "systemInstruction": {"parts": [{"text": SUMMARY_PROMPT}]},
+                            "contents": [{"role": "user", "parts": [{"text": user_content}]}],
+                            "generationConfig": {
+                                "temperature": 0.2,
+                                "responseMimeType": "application/json"
+                            }
+                        }
+                        try:
+                            resp = await client.post(url, json=payload)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                candidates = data.get("candidates", [])
+                                if candidates:
+                                    parts = candidates[0].get("content", {}).get("parts", [])
+                                    if parts:
+                                        raw_text = parts[0].get("text", "").strip()
+                                        parsed = json.loads(raw_text)
+                                        if "summary" in parsed and "overall_status" in parsed:
+                                            logger.info(f"Summary successfully generated via Gemini ({current_model}) using key #{idx+1}")
+                                            return parsed
+                            else:
+                                logger.warning(f"Summary: Gemini ({current_model}) key #{idx+1} failed with HTTP {resp.status_code}. Trying next key...")
+                        except Exception as e:
+                            logger.warning(f"Summary: Gemini ({current_model}) key #{idx+1} error: {e}. Trying next key...")
+
+        # 2. Secondary fallback: OpenRouter / NVIDIA NIM
         messages = [
             {"role": "system", "content": SUMMARY_PROMPT},
-            {"role": "user", "content": f"Summarize this elder session:\n{json.dumps(call_details, default=str)}"}
+            {"role": "user", "content": user_content}
         ]
 
-        # Attempt LLM summary generation with prioritized providers
         provider_calls = []
-        if config.LLM_PROVIDER == "nvidia":
-            if config.NVIDIA_API_KEY and not config.NVIDIA_API_KEY.startswith("your_"):
-                provider_calls.append(("NVIDIA NIM", f"{config.NVIDIA_BASE_URL.rstrip('/')}/chat/completions", {"Authorization": f"Bearer {config.NVIDIA_API_KEY}", "Content-Type": "application/json"}, config.NVIDIA_MODEL))
-            if config.OPENROUTER_API_KEY and not config.OPENROUTER_API_KEY.startswith("your_"):
-                provider_calls.append(("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json", "HTTP-Referer": "https://carebridge.local"}, config.OPENROUTER_MODEL))
-        else:
-            if config.OPENROUTER_API_KEY and not config.OPENROUTER_API_KEY.startswith("your_"):
-                provider_calls.append(("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json", "HTTP-Referer": "https://carebridge.local"}, config.OPENROUTER_MODEL))
-            if config.NVIDIA_API_KEY and not config.NVIDIA_API_KEY.startswith("your_"):
-                provider_calls.append(("NVIDIA NIM", f"{config.NVIDIA_BASE_URL.rstrip('/')}/chat/completions", {"Authorization": f"Bearer {config.NVIDIA_API_KEY}", "Content-Type": "application/json"}, config.NVIDIA_MODEL))
+        if config.OPENROUTER_API_KEY and not config.OPENROUTER_API_KEY.startswith("your_"):
+            provider_calls.append(("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}", "Content-Type": "application/json", "HTTP-Referer": "https://carebridge.local"}, config.OPENROUTER_MODEL))
+        if config.NVIDIA_API_KEY and not config.NVIDIA_API_KEY.startswith("your_"):
+            provider_calls.append(("NVIDIA NIM", f"{config.NVIDIA_BASE_URL.rstrip('/')}/chat/completions", {"Authorization": f"Bearer {config.NVIDIA_API_KEY}", "Content-Type": "application/json"}, config.NVIDIA_MODEL))
 
         async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
             for p_name, p_url, p_headers, p_model in provider_calls:
@@ -89,7 +123,7 @@ class SummaryService:
                                 content = raw_content.strip()
                                 if content.startswith("```json"):
                                     content = content[7:]
-                                if content.startswith("```"):
+                                elif content.startswith("```"):
                                     content = content[3:]
                                 if content.endswith("```"):
                                     content = content[:-3]
@@ -100,6 +134,8 @@ class SummaryService:
                 except Exception as e:
                     logger.error(f"Error generating summary via {p_name}: {e}")
 
+        # 3. Fallback to deterministic clinical heuristic summary
+        logger.info("Engaging clinical heuristic summary generation.")
         return cls._build_heuristic_summary(session, status_rank)
 
     @classmethod
@@ -119,6 +155,24 @@ class SummaryService:
         elif es.get("medicationTaken") is False:
             key_points.append("Medication was reported NOT taken.")
             caregiver_actions.append("Follow up to ensure necessary medication is taken.")
+
+        if es.get("breakfast") is True:
+            key_points.append("Breakfast confirmed eaten.")
+        elif es.get("breakfast") is False:
+            key_points.append("Breakfast was reported skipped.")
+            caregiver_actions.append("Encourage having a morning meal or snack.")
+
+        if es.get("lunch") is True:
+            key_points.append("Lunch confirmed eaten.")
+        elif es.get("lunch") is False:
+            key_points.append("Lunch was reported skipped.")
+            caregiver_actions.append("Encourage having lunch or nutritious midday snack.")
+
+        if es.get("dinner") is True:
+            key_points.append("Dinner confirmed eaten.")
+        elif es.get("dinner") is False:
+            key_points.append("Dinner was reported skipped.")
+            caregiver_actions.append("Ensure elder has dinner before bedtime.")
 
         if es.get("painPresent"):
             loc = es.get("painLocation") or "unspecified area"

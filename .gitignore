@@ -46,3 +46,13 @@ htmlcov/
 # Logs & temp
 *.log
 tmp/
+*.db
+*.db-shm
+*.db-wal
+
+# Playwright & test artifacts
+.playwright-mcp/
+*.png
+
+
+

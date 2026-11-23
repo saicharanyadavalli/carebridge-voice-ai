@@ -35,6 +35,7 @@ class SessionState(BaseModel):
     startedAt: str
     endedAt: Optional[str] = None
     language: str = "en"
+    clientHour: Optional[int] = None
     recentTurns: List[Dict[str, str]] = Field(default_factory=list)  # [{"role": "user"|"assistant", "text": "..."}]
     rollingSummary: str = ""
     importantMemory: List[Dict[str, Any]] = Field(default_factory=list)
@@ -53,9 +54,11 @@ class SessionState(BaseModel):
     })
     activeConcerns: List[Dict[str, Any]] = Field(default_factory=list)
     transcript: List[Dict[str, str]] = Field(default_factory=list)
+    events: List[Dict[str, Any]] = Field(default_factory=list)
 
 class LLMTurnResponse(BaseModel):
     reply: str
+    call_ended: bool = False
     memory_updates: List[Dict[str, Any]] = Field(default_factory=list)
     status_updates: Dict[str, Any] = Field(default_factory=dict)
     concern: Dict[str, Any] = Field(default_factory=lambda: {"level": "none", "reason": None, "action": None})
