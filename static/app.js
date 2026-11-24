@@ -33,6 +33,7 @@ class TTSAdapter {
     this.isMuted = false;
     this.currentUtterance = null;
     this.currentAudio = null;
+    this.currentAudioUrl = null;
     this.audioElement = null;
     this.voice = null;
     this.lang = 'en-US';
@@ -94,18 +95,38 @@ class TTSAdapter {
         this.audioElement = new Audio();
       }
       this.currentAudio = this.audioElement;
-      this.audioElement.src = "data:audio/wav;base64," + audioBase64;
+
+      // Decode base64 to binary and create Blob Object URL for memory efficiency
+      const binaryStr = atob(audioBase64);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const audioBlob = new Blob([bytes], { type: 'audio/wav' });
+      const objectUrl = URL.createObjectURL(audioBlob);
+      this.currentAudioUrl = objectUrl;
+      this.audioElement.src = objectUrl;
+
+      const cleanupUrl = () => {
+        if (this.currentAudioUrl) {
+          try { URL.revokeObjectURL(this.currentAudioUrl); } catch (e) {}
+          this.currentAudioUrl = null;
+        }
+      };
 
       this.audioElement.onplay = () => {
         if (onStart) onStart();
       };
 
       this.audioElement.onended = () => {
+        cleanupUrl();
         this.currentAudio = null;
         if (onEnd) onEnd();
       };
 
       this.audioElement.onerror = (e) => {
+        cleanupUrl();
         console.warn("Audio playback error, falling back to speech synthesis:", e);
         this.currentAudio = null;
         if (onError) onError(e);
@@ -115,6 +136,7 @@ class TTSAdapter {
       const playPromise = this.audioElement.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
+          cleanupUrl();
           console.warn("Audio autoplay blocked or failed, falling back to speech synthesis:", err);
           this.currentAudio = null;
           if (onError) onError(err);
@@ -186,6 +208,10 @@ class TTSAdapter {
   }
 
   stop() {
+    if (this.currentAudioUrl) {
+      try { URL.revokeObjectURL(this.currentAudioUrl); } catch (e) {}
+      this.currentAudioUrl = null;
+    }
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -218,6 +244,7 @@ class CareBridgeController {
     this.speechPauseTimer = null;
     this.accumulatedTranscript = '';
     this.isCallActive = false;
+    this.chatAbortController = null;
 
     this.currentLang = 'en-US';
     this.btnLang = document.getElementById('btnLang');
@@ -430,7 +457,30 @@ class CareBridgeController {
           this.startCall();
         }
       });
+      this.voiceOrb.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') {
+          e.preventDefault();
+          if (!this.isCallActive) {
+            this.startCall();
+          }
+        }
+      });
     }
+
+    const btnCloseSummary = document.getElementById('btnCloseSummary');
+    if (btnCloseSummary) {
+      btnCloseSummary.addEventListener('click', () => {
+        this.hideSummary();
+      });
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (this.summaryModal && this.summaryModal.style.display !== 'none' && this.summaryModal.style.display !== '') {
+          this.hideSummary();
+        }
+      }
+    });
 
     this.btnMute.addEventListener('click', () => {
       const muted = this.tts.toggleMute();
@@ -523,6 +573,7 @@ class CareBridgeController {
         const prompt = isHi
           ? "मैं आपकी बात सुन रहा हूँ। आप आराम से बोल सकते हैं।"
           : "I am still here listening. Please take your time.";
+        this.stopListening();
         this.tts.speak(
           prompt,
           () => this.transitionTo(State.SPEAKING),
@@ -749,6 +800,11 @@ class CareBridgeController {
     this.transitionTo(State.THINKING);
     this.appendTranscript('user', userText);
 
+    if (this.chatAbortController) {
+      this.chatAbortController.abort();
+    }
+    this.chatAbortController = new AbortController();
+
     try {
       const apiBase = getApiBase();
       const resp = await fetch(`${apiBase}/api/chat`, {
@@ -757,14 +813,18 @@ class CareBridgeController {
         body: JSON.stringify({
           callId: this.currentCallId,
           message: userText
-        })
+        }),
+        signal: this.chatAbortController.signal
       });
+
+      if (!this.isCallActive) return;
 
       if (!resp.ok) {
         throw new Error("Chat request failed");
       }
 
       const data = await resp.json();
+      if (!this.isCallActive) return;
 
       // Update Live UI
       this.renderStatus(data.elderStatus);
@@ -807,6 +867,10 @@ class CareBridgeController {
       );
 
     } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log("Chat request was aborted.");
+        return;
+      }
       console.error("Chat error:", err);
       // Recover gracefully - never leave stuck in THINKING
       const isHi = this.currentLang && this.currentLang.startsWith('hi');
@@ -827,6 +891,10 @@ class CareBridgeController {
   async endCall() {
     if (!this.isCallActive) return;
     this.isCallActive = false;
+    if (this.chatAbortController) {
+      this.chatAbortController.abort();
+      this.chatAbortController = null;
+    }
     this.stopListening();
     this.tts.stop();
     this.transitionTo(State.ENDING);

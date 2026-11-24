@@ -48,12 +48,12 @@
     </header>
 
     <!-- Error / Notification banner -->
-    <div id="errorBanner" class="notification-banner notif-error"></div>
+    <div id="errorBanner" class="notification-banner notif-error" role="alert" aria-live="assertive"></div>
 
     <!-- Main Tactile Voice Hero Section -->
     <section class="interaction-card">
       <div class="state-badge-container">
-        <div id="stateBadge" class="state-badge state-IDLE">
+        <div id="stateBadge" class="state-badge state-IDLE" role="status" aria-live="polite">
           <span class="pulse-circle"></span>
           <span id="stateText">IDLE</span>
         </div>
@@ -61,7 +61,7 @@
 
       <!-- Centered Tactile Voice Orb with Ambient Wave Halos -->
       <div class="voice-orb-wrapper" id="voiceOrbWrapper">
-        <div id="voiceOrb" class="voice-orb state-IDLE" title="Tap to Start / Speak">
+        <div id="voiceOrb" class="voice-orb state-IDLE" role="button" tabindex="0" aria-label="Microphone Voice Control" title="Tap or press Enter to Start / Speak">
           <span id="voiceOrbIcon" class="voice-orb-icon">🎙️</span>
         </div>
         <div class="voice-wave-ring"></div>
@@ -97,7 +97,7 @@
           <span>💬 Live Conversation</span>
           <span style="font-size: 12px; font-weight: normal; color: var(--text-muted);">Real-time</span>
         </div>
-        <div id="transcriptList" class="transcript-box">
+        <div id="transcriptList" class="transcript-box" role="log" aria-live="polite" aria-atomic="false">
           <div class="empty-placeholder">
             Conversation will appear here once started.
           </div>
@@ -129,10 +129,13 @@
     </div>
 
     <!-- Final End-of-Call Caregiver Report Modal/Card -->
-    <section id="summaryModal" class="summary-container">
+    <section id="summaryModal" class="summary-container" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
       <div class="summary-header">
-        <h2>📋 Caregiver End-of-Call Summary</h2>
-        <span id="sumOverallStatus" class="overall-status-badge status-stable">Stable</span>
+        <h2 id="summaryTitle">📋 Caregiver End-of-Call Summary</h2>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span id="sumOverallStatus" class="overall-status-badge status-stable">Stable</span>
+          <button id="btnCloseSummary" class="btn-secondary" aria-label="Close summary report" style="font-weight: 700; cursor: pointer;">✕ Close Report</button>
+        </div>
       </div>
 
       <div class="summary-section">

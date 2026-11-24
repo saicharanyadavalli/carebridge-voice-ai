@@ -9,7 +9,6 @@ class Config:
     @property
     def GEMINI_API_KEYS(self) -> List[str]:
         """Returns non-empty, non-placeholder Google API keys for rotation."""
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         keys: List[str] = []
         # Check standard GEMINI_API_KEY (or comma-separated)
         primary = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
@@ -38,42 +37,34 @@ class Config:
 
     @property
     def GEMINI_MODEL(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     @property
     def OPENROUTER_API_KEY(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("OPENROUTER_API_KEY", "")
 
     @property
     def OPENROUTER_MODEL(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("OPENROUTER_MODEL", "google/gemma-4-26b-a4b-it:free")
 
     @property
     def NVIDIA_API_KEY(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("NVIDIA_API_KEY", "")
 
     @property
     def NVIDIA_MODEL(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 
     @property
     def NVIDIA_BASE_URL(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 
     @property
     def LLM_PROVIDER(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("LLM_PROVIDER", "gemini").lower()
 
     @property
     def APP_LANGUAGE(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("APP_LANGUAGE", "en").lower()
 
     @property
@@ -90,22 +81,18 @@ class Config:
 
     @property
     def SARVAM_API_KEY(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("SARVAM_API_KEY", "").strip()
 
     @property
     def SARVAM_TTS_MODEL(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("SARVAM_TTS_MODEL", "bulbul:v4-flash").strip()
 
     @property
     def SARVAM_TTS_SPEAKER(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("SARVAM_TTS_SPEAKER", "simran_en_customer").strip()
 
     @property
     def SARVAM_STT_MODEL(self) -> str:
-        load_dotenv(dotenv_path=DOTENV_PATH, override=True)
         return os.getenv("SARVAM_STT_MODEL", "saaras:v4").strip()
 
     REQUEST_TIMEOUT: float = 25.0

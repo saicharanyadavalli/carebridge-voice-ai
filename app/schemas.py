@@ -13,6 +13,7 @@ class ElderStatus(BaseModel):
     painSeverity: Optional[str] = None
     dizziness: Optional[bool] = None
     fallReported: Optional[bool] = None
+    hydration: Optional[bool] = None
 
 class MemoryItem(BaseModel):
     category: str = "general"
@@ -50,7 +51,8 @@ class SessionState(BaseModel):
         "painLocation": None,
         "painSeverity": None,
         "dizziness": None,
-        "fallReported": None
+        "fallReported": None,
+        "hydration": None
     })
     activeConcerns: List[Dict[str, Any]] = Field(default_factory=list)
     transcript: List[Dict[str, str]] = Field(default_factory=list)

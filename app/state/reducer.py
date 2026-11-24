@@ -14,7 +14,7 @@ class StateReducer:
     ALLOWED_STATUS_FIELDS = {
         "mood", "sleep", "breakfast", "lunch", "dinner",
         "medicationTaken", "painPresent", "painLocation",
-        "painSeverity", "dizziness", "fallReported"
+        "painSeverity", "dizziness", "fallReported", "hydration"
     }
 
     @staticmethod
@@ -70,7 +70,9 @@ class StateReducer:
             )
 
         elif etype == "CONCERN_RESOLVED":
-            target_reason = payload.get("reason", "").lower()
+            target_reason = payload.get("reason", "").lower().strip()
+            if not target_reason:
+                return
             session.activeConcerns = [
                 c for c in session.activeConcerns 
                 if target_reason not in str(c.get("reason", "")).lower()

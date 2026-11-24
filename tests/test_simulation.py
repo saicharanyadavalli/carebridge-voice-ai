@@ -79,7 +79,7 @@ def test_simulate_complete_hindi_conversation_flow():
     assert start_resp.status_code == 200
     start_data = start_resp.json()
     call_id = start_data["callId"]
-    assert "नमस्ते" in start_data["greeting"]
+    assert any(g in start_data["greeting"] for g in ["नमस्ते", "शुभ प्रभात", "शुभ संध्या", "CareBridge"])
 
     # 2. Turn 1: Elder confirms medication in Hindi
     r1 = client.post("/api/chat", json={

@@ -17,6 +17,33 @@ class SarvamService:
 
     TTS_URL = "https://api.sarvam.ai/text-to-speech"
     STT_URL = "https://api.sarvam.ai/speech-to-text"
+    _client: Optional[httpx.AsyncClient] = None
+    _client_loop: Any = None
+
+    @classmethod
+    def get_client(cls) -> httpx.AsyncClient:
+        """Returns or creates a shared persistent httpx client with connection pooling bound to the active event loop."""
+        import asyncio
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if (
+            cls._client is None
+            or cls._client.is_closed
+            or getattr(cls, "_client_loop", None) != current_loop
+        ):
+            cls._client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0))
+            cls._client_loop = current_loop
+        return cls._client
+
+    @classmethod
+    async def close_client(cls):
+        """Closes persistent httpx client on shutdown."""
+        if cls._client and not cls._client.is_closed:
+            await cls._client.aclose()
+            cls._client = None
 
     @classmethod
     def _resolve_language_code(cls, lang: Optional[str], text: Optional[str] = None) -> str:
@@ -72,22 +99,22 @@ class SarvamService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
-                response = await client.post(cls.TTS_URL, headers=headers, json=payload)
-                if response.status_code == 200:
-                    data = response.json()
-                    audios = data.get("audios", [])
-                    if audios:
-                        logger.info(f"Successfully generated Sarvam TTS ({lang_code}, {tts_model})")
-                        return {
-                            "status": "ok",
-                            "audio_base64": audios[0],
-                            "format": "audio/wav",
-                            "language_code": lang_code
-                        }
-                    logger.warning("Sarvam TTS returned HTTP 200 but audios array was empty.")
-                else:
-                    logger.warning(f"Sarvam TTS failed ({response.status_code}): {response.text[:200]}")
+            client = cls.get_client()
+            response = await client.post(cls.TTS_URL, headers=headers, json=payload)
+            if response.status_code == 200:
+                data = response.json()
+                audios = data.get("audios", [])
+                if audios:
+                    logger.info(f"Successfully generated Sarvam TTS ({lang_code}, {tts_model})")
+                    return {
+                        "status": "ok",
+                        "audio_base64": audios[0],
+                        "format": "audio/wav",
+                        "language_code": lang_code
+                    }
+                logger.warning("Sarvam TTS returned HTTP 200 but audios array was empty.")
+            else:
+                logger.warning(f"Sarvam TTS failed ({response.status_code}): {response.text[:200]}")
         except Exception as e:
             logger.warning(f"Exception during Sarvam TTS request: {e}")
 
@@ -128,20 +155,20 @@ class SarvamService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=20.0, verify=False) as client:
-                response = await client.post(cls.STT_URL, headers=headers, files=files, data=data)
-                if response.status_code == 200:
-                    res_json = response.json()
-                    transcript = res_json.get("transcript", "").strip()
-                    logger.info(f"Successfully transcribed audio via Sarvam STT ({lang_code}): '{transcript[:60]}'")
-                    return {
-                        "status": "ok",
-                        "transcript": transcript,
-                        "language_code": res_json.get("language_code", lang_code),
-                        "request_id": res_json.get("request_id")
-                    }
-                else:
-                    logger.warning(f"Sarvam STT failed ({response.status_code}): {response.text[:200]}")
+            client = cls.get_client()
+            response = await client.post(cls.STT_URL, headers=headers, files=files, data=data)
+            if response.status_code == 200:
+                res_json = response.json()
+                transcript = res_json.get("transcript", "").strip()
+                logger.info(f"Successfully transcribed audio via Sarvam STT ({lang_code}): '{transcript[:60]}'")
+                return {
+                    "status": "ok",
+                    "transcript": transcript,
+                    "language_code": res_json.get("language_code", lang_code),
+                    "request_id": res_json.get("request_id")
+                }
+            else:
+                logger.warning(f"Sarvam STT failed ({response.status_code}): {response.text[:200]}")
         except Exception as e:
             logger.warning(f"Exception during Sarvam STT request: {e}")
 

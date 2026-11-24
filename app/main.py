@@ -32,13 +32,15 @@ raw_origins = getattr(config, "ALLOWED_ORIGINS", "*")
 origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
 if not origins or "*" in origins:
     cors_origins = ["*"]
+    allow_credentials = False
 else:
     cors_origins = origins
+    allow_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -88,12 +90,20 @@ async def voice_tts(req: VoiceTTSRequest):
         return {"status": "fallback", "audio_base64": None, "message": "Sarvam TTS unavailable, using browser speech synthesis"}
     return res
 
+MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
+
 @app.post("/api/voice/stt")
 async def voice_stt(file: UploadFile = File(...), language: Optional[str] = Form(None)):
     """Transcribes audio using Sarvam AI Saaras speech recognition."""
+    if file.size and file.size > MAX_AUDIO_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="Audio file exceeds 10MB limit")
+
     audio_bytes = await file.read()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Empty audio file provided")
+    if len(audio_bytes) > MAX_AUDIO_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="Audio file exceeds 10MB limit")
+
     res = await SarvamService.speech_to_text(
         audio_bytes=audio_bytes,
         filename=file.filename or "audio.wav",

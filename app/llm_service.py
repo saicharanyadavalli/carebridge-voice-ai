@@ -94,7 +94,8 @@ class LLMService:
             "contents": gemini_contents,
             "generationConfig": {
                 "temperature": 0.3,
-                "responseMimeType": "application/json"
+                "responseMimeType": "application/json",
+                "maxOutputTokens": 250
             }
         }
         if system_instruction_text:
@@ -107,9 +108,16 @@ class LLMService:
             if fallback_m not in models_to_try:
                 models_to_try.append(fallback_m)
 
-        async with httpx.AsyncClient(timeout=12.0) as client:
+        total_attempts = 0
+        max_total_attempts = 4  # Keep cumulative retry budget strictly bounded
+
+        async with httpx.AsyncClient(timeout=6.0) as client:
             for current_model in models_to_try:
                 for idx, key in enumerate(api_keys):
+                    if total_attempts >= max_total_attempts:
+                        logger.warning("Gemini cumulative retry attempt budget reached. Falling back to next provider.")
+                        return None
+                    total_attempts += 1
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={key}"
                     try:
                         response = await client.post(url, json=payload)
@@ -159,14 +167,14 @@ class LLMService:
             if candidate not in models_to_try:
                 models_to_try.append(candidate)
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=8.0) as client:
             for model in models_to_try:
                 payload = {
                     "model": model,
                     "messages": messages,
                     "response_format": {"type": "json_object"},
                     "temperature": 0.3,
-                    "max_tokens": 1000
+                    "max_tokens": 250
                 }
                 try:
                     response = await client.post(cls.OPENROUTER_URL, headers=headers, json=payload)
@@ -220,7 +228,7 @@ class LLMService:
                     "messages": messages,
                     "temperature": 0.5,
                     "top_p": 0.7,
-                    "max_tokens": 1024,
+                    "max_tokens": 250,
                     "response_format": {"type": "json_object"}
                 }
                 try:
@@ -261,6 +269,8 @@ class LLMService:
         4. CareBridge Clinical Conversation Engine (guaranteed fail-safe)
         """
         user_msg = messages[-1]["content"] if messages else ""
+        if user_msg.startswith("<elder_utterance>") and user_msg.endswith("</elder_utterance>"):
+            user_msg = user_msg[len("<elder_utterance>"):-len("</elder_utterance>")].strip()
         provider_pref = config.LLM_PROVIDER.lower()
 
         # Build prioritized provider sequence based on user preference
